@@ -1,0 +1,6 @@
+src-tauri/target/
+src-tauri/gen/
+# Recursos de terceros: viven en %APPDATA%\PadHub\recursos, nunca en el repo
+ui/img/
+ui/fonts/
+*.key
