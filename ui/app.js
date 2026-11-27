@@ -43,10 +43,11 @@ function battery(p, pad) {
   const level = p.pct ?? (p.kind === 'charged' ? 100 : null);
   const cls = level == null ? '' : level <= 15 ? 'low' : level <= 35 ? 'mid' : '';
   const fill = level == null ? (p.kind === 'wired' ? 100 : 0) : level;
+  const ap = pad?.battery_approx ? '≈' : '';
   const label = {
     wired: 'Con cable',
-    charging: `Cargando · ${level}%`,
-    discharging: `${level}%`,
+    charging: `Cargando · ${ap}${level}%`,
+    discharging: `${ap}${level}%`,
     charged: 'Cargado',
     unknown: 'Batería n/d',
   }[p.kind];
@@ -152,7 +153,7 @@ function renderHome() {
           <article class="card" data-id="${p.id}" style="animation-delay:${i * 70}ms">
             ${p.needs_confirm ? `
             ${padSvg(GENERIC)}
-            <div class="brand">Receptor 2.4G genérico</div>
+            <div class="brand">${p.mapping === 'bt-switch' ? 'Bluetooth · modo mando Pro de Switch' : 'Receptor 2.4G genérico'}</div>
             <div class="mname">¿Qué mando es?</div>
             <div class="chips">
               ${models.filter((m) => m.id !== 'machenike-generic').map((m) => `<button class="pill ghost btn chip" data-assign="${m.id}">${m.brand} ${m.name}</button>`).join('')}
@@ -165,7 +166,7 @@ function renderHome() {
               <span class="pill">${battery(p.power, p)}</span>
               <button class="pill dark btn">Entrar  →</button>
             </div>
-            ${p.identified ? '' : `<span class="tag" style="margin-top:6px">Sin identificar · ${hex(p.vid)}:${hex(p.pid)}</span>`}
+            ${p.identified || p.needs_confirm ? '' : `<span class="tag" style="margin-top:6px">Sin identificar · ${hex(p.vid)}:${hex(p.pid)}</span>`}
           </article>`).join('')}
       </div>
     </section>`;
@@ -478,7 +479,7 @@ function renderTab() {
           <dt>VID : PID</dt><dd class="mono">${hex(p.vid)} : ${hex(p.pid)}</dd>
           <dt>Mismo puerto USB</dt><dd class="mono">${esc(p.siblings.join(' · ')) || '—'}</dd>
           <dt>Cadenas HID</dt><dd>${esc(p.hid_strings.join(' · ')) || '—'}</dd>
-          <dt>Mapeo</dt><dd>${{ driver: 'XInput (gamepad)', other: 'XInput (otro tipo)' }[p.mapping] ?? p.mapping}</dd>
+          <dt>Mapeo</dt><dd>${{ driver: 'XInput (gamepad)', other: 'XInput (otro tipo)', 'bt-switch': 'Bluetooth · protocolo mando Pro de Switch' }[p.mapping] ?? p.mapping}</dd>
           <dt>Batería</dt><dd>${battery(p.power, p)}</dd>
           <dt>Vibración</dt><dd>${p.rumble ? 'Sí' : 'No'}</dd>
           <dt>Versión de producto</dt><dd class="mono">${p.product_version != null ? `0x${p.product_version.toString(16).padStart(4, '0').toUpperCase()}` : '—'}</dd>

@@ -40,6 +40,8 @@ pub struct PadInfo {
     pub how: Option<String>,
     /// Otros VID/PID vistos en el mismo puerto USB.
     pub siblings: Vec<String>,
+    /// La batería es aproximada (Bluetooth: el protocolo solo da 5 niveles).
+    pub battery_approx: bool,
 }
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -127,6 +129,9 @@ fn run(shared: Shared, assign: Assignments, rx: Receiver<Cmd>) {
     let mut last_info = Instant::now() - Duration::from_secs(10);
     let mut last_rate = Instant::now();
     let mut dirty = true;
+    // Mandos Bluetooth en modo Switch Pro: (ruta HID, id en la app, estado)
+    let mut bts: Vec<(std::ffi::CString, usize, crate::bt::Shared)> = Vec::new();
+    let mut next_bt = 100usize;
 
     loop {
         // Órdenes de la interfaz.
@@ -191,6 +196,14 @@ fn run(shared: Shared, assign: Assignments, rx: Receiver<Cmd>) {
                 }
             }
         }
+        // Bluetooth: estado que van dejando los hilos lectores.
+        for (_, id, st) in &bts {
+            let s = st.lock().unwrap();
+            if s.alive && s.last.map(|t| t.elapsed() < Duration::from_secs(2)).unwrap_or(false) {
+                live.insert(*id, s.live.clone());
+            }
+        }
+
         if last_rate.elapsed() >= Duration::from_secs(1) {
             for s in slots.iter_mut() {
                 s.rate = s.packets;
@@ -254,6 +267,56 @@ fn run(shared: Shared, assign: Assignments, rx: Receiver<Cmd>) {
                     product_version: info.as_ref().and_then(|x| x.product_version),
                     how,
                     siblings: siblings.iter().map(|(v, p)| format!("{v:04X}:{p:04X}")).collect(),
+                    battery_approx: false,
+                });
+            }
+
+            // Bluetooth: buscar mandos nuevos y quitar los desconectados.
+            bts.retain(|(_, _, st)| st.lock().unwrap().alive);
+            if let Some(api) = hid.as_mut() {
+                let _ = api.refresh_devices();
+                for d in api.device_list().filter(|d| d.vendor_id() == crate::bt::VID && d.product_id() == crate::bt::PID) {
+                    let path = d.path().to_owned();
+                    if !bts.iter().any(|(p, _, _)| *p == path) {
+                        bts.push((path.clone(), next_bt, crate::bt::spawn(path)));
+                        next_bt += 1;
+                        dirty = true;
+                    }
+                }
+            }
+            for (_, id, st) in &bts {
+                let s = st.lock().unwrap();
+                if !s.last.map(|t| t.elapsed() < Duration::from_secs(2)).unwrap_or(false) {
+                    continue;
+                }
+                let key = "bt:057e:2009".to_string();
+                let manual = assign_map.get(&key).and_then(|m| models::by_id(m));
+                let assigned = manual.is_some();
+                let power = match s.battery {
+                    Some((lvl, true)) => Power { kind: "charging", pct: Some(crate::bt::battery_pct(lvl)) },
+                    Some((lvl, false)) => Power { kind: "discharging", pct: Some(crate::bt::battery_pct(lvl)) },
+                    None => Power { kind: "unknown", pct: None },
+                };
+                infos.push(PadInfo {
+                    id: *id,
+                    key,
+                    name: "Mando Bluetooth (modo Switch Pro)".into(),
+                    os_name: "Pro Controller".into(),
+                    vid: Some(crate::bt::VID),
+                    pid: Some(crate::bt::PID),
+                    hid_strings: vec!["Wireless Gamepad".into()],
+                    power,
+                    rumble: false,
+                    mapping: "bt-switch",
+                    model: manual.unwrap_or_else(models::generic),
+                    identified: assigned,
+                    assigned,
+                    // El nombre "Pro Controller" lo usan muchos mandos: se pregunta cuál es.
+                    needs_confirm: !assigned,
+                    product_version: None,
+                    how: Some(if assigned { "Asignado a mano".into() } else { "Bluetooth en modo mando Pro de Switch: confirma cuál es".into() }),
+                    siblings: vec![],
+                    battery_approx: true,
                 });
             }
         }

@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod bt;
 mod models;
 mod pads;
 mod usbhints;
@@ -279,6 +280,85 @@ fn main() {
     let assign: Assignments = Arc::new(Mutex::new(load_assign()));
     let (tx, rx) = std::sync::mpsc::channel();
     pads::spawn(shared.clone(), assign.clone(), rx);
+
+    // `padhub --listen VID:PID MS`: escucha pasiva (solo lectura) de todas las
+    // interfaces HID de un dispositivo e imprime los informes. Solo diagnóstico.
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(i) = args.iter().position(|a| a == "--listen") {
+        let (v, p) = args.get(i + 1).and_then(|s| s.split_once(':')).unwrap_or(("0", "0"));
+        let (vid, pid) = (u16::from_str_radix(v, 16).unwrap_or(0), u16::from_str_radix(p, 16).unwrap_or(0));
+        let ms: u64 = args.get(i + 2).and_then(|s| s.parse().ok()).unwrap_or(3000);
+        let api = hidapi::HidApi::new().expect("hidapi");
+        for d in api.device_list().filter(|d| d.vendor_id() == vid && d.product_id() == pid) {
+            println!("== iface {} usage 0x{:x}:0x{:x} {:?}", d.interface_number(), d.usage_page(), d.usage(), d.product_string());
+            match api.open_path(d.path()) {
+                Ok(dev) => {
+                    let until = std::time::Instant::now() + std::time::Duration::from_millis(ms);
+                    let mut buf = [0u8; 128];
+                    let mut n_rep = 0;
+                    while std::time::Instant::now() < until && n_rep < 40 {
+                        if let Ok(n) = dev.read_timeout(&mut buf, 100) {
+                            if n > 0 {
+                                n_rep += 1;
+                                println!("{}", buf[..n].iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" "));
+                            }
+                        }
+                    }
+                    println!("({n_rep} informes)");
+                }
+                Err(e) => println!("no se pudo abrir: {e}"),
+            }
+        }
+        return;
+    }
+
+    // `padhub --procon-full VID:PID MS`: envía SOLO el subcomando estándar del
+    // protocolo Pro Controller "cambiar a informes completos" (0x03, arg 0x30) y
+    // escucha. Es lo mismo que hacen SDL/Steam al conectar el mando.
+    if let Some(i) = args.iter().position(|a| a == "--procon-full") {
+        let (v, p) = args.get(i + 1).and_then(|s| s.split_once(':')).unwrap_or(("0", "0"));
+        let (vid, pid) = (u16::from_str_radix(v, 16).unwrap_or(0), u16::from_str_radix(p, 16).unwrap_or(0));
+        let ms: u64 = args.get(i + 2).and_then(|s| s.parse().ok()).unwrap_or(3000);
+        let api = hidapi::HidApi::new().expect("hidapi");
+        let dev = api.open(vid, pid).expect("no se pudo abrir el mando");
+        // Informe de salida 0x01: contador, vibración neutra (8 bytes), subcomando 0x03, argumento 0x30.
+        let mut out = [0u8; 49];
+        out[..12].copy_from_slice(&[0x01, 0x00, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x03, 0x30]);
+        match dev.write(&out) {
+            Ok(n) => println!("enviado ({n} bytes): subcomando 0x03 -> modo 0x30"),
+            Err(e) => println!("error al enviar: {e}"),
+        }
+        let until = std::time::Instant::now() + std::time::Duration::from_millis(ms);
+        let mut buf = [0u8; 128];
+        let (mut shown, mut full) = (0, 0);
+        while std::time::Instant::now() < until {
+            if let Ok(n) = dev.read_timeout(&mut buf, 100) {
+                if n == 0 {
+                    continue;
+                }
+                let id = buf[0];
+                if id == 0x30 || id == 0x21 {
+                    full += 1;
+                    let nib = buf[2] >> 4;
+                    let nivel = match nib & 0x0E { 8 => "lleno", 6 => "medio", 4 => "bajo", 2 => "crítico", 0 => "vacío", _ => "?" };
+                    if shown < 6 {
+                        println!(
+                            "informe 0x{id:02x} | byte2=0x{:02x} -> batería {nivel} (nibble {nib}){} | {}",
+                            buf[2],
+                            if nib & 1 == 1 { ", cargando" } else { "" },
+                            buf[..n.min(16)].iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" ")
+                        );
+                        shown += 1;
+                    }
+                } else if shown < 6 {
+                    println!("informe 0x{id:02x} (otro tipo): {}", buf[..n.min(16)].iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" "));
+                    shown += 1;
+                }
+            }
+        }
+        println!("({full} informes completos/respuestas en {ms} ms)");
+        return;
+    }
 
     // `padhub --dump`: imprime lo detectado y sale (diagnóstico sin ventana).
     if std::env::args().any(|a| a == "--dump") {
