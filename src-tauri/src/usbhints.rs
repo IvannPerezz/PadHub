@@ -11,9 +11,12 @@
 /// USB que un dispositivo con `vid:pid`.
 #[cfg(windows)]
 pub fn port_siblings(vid: u16, pid: u16) -> Vec<(u16, u16)> {
-    let ids = usb_instance_ids();
+    let ids = usb_instance_ids(false);
     let me = format!("USB\\VID_{vid:04X}&PID_{pid:04X}\\");
-    let suffixes: Vec<&str> = ids
+    // Solo el puerto donde el dispositivo está conectado AHORA: si no, un mando
+    // por cable heredaría el receptor que hubo en otro puerto.
+    let present = usb_instance_ids(true);
+    let suffixes: Vec<&str> = present
         .iter()
         .filter(|id| id.to_uppercase().starts_with(&me))
         .filter_map(|id| id.rsplit('\\').next())
@@ -47,20 +50,23 @@ fn parse_vid_pid(id: &str) -> Option<(u16, u16)> {
     Some((vid, pid))
 }
 
-/// Todos los identificadores de instancia del enumerador USB (presentes o no).
+/// Identificadores de instancia del enumerador USB: todos los que Windows
+/// recuerda (`present_only = false`) o solo los conectados ahora.
 #[cfg(windows)]
-fn usb_instance_ids() -> Vec<String> {
+fn usb_instance_ids(present_only: bool) -> Vec<String> {
     use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
-        CM_Get_Device_ID_ListW, CM_Get_Device_ID_List_SizeW, CM_GETIDLIST_FILTER_ENUMERATOR, CR_SUCCESS,
+        CM_Get_Device_ID_ListW, CM_Get_Device_ID_List_SizeW, CM_GETIDLIST_FILTER_ENUMERATOR, CM_GETIDLIST_FILTER_PRESENT,
+        CR_SUCCESS,
     };
     let filter: Vec<u16> = "USB\0".encode_utf16().collect();
+    let flags = CM_GETIDLIST_FILTER_ENUMERATOR | if present_only { CM_GETIDLIST_FILTER_PRESENT } else { 0 };
     unsafe {
         let mut len = 0u32;
-        if CM_Get_Device_ID_List_SizeW(&mut len, filter.as_ptr(), CM_GETIDLIST_FILTER_ENUMERATOR) != CR_SUCCESS {
+        if CM_Get_Device_ID_List_SizeW(&mut len, filter.as_ptr(), flags) != CR_SUCCESS {
             return vec![];
         }
         let mut buf = vec![0u16; len as usize];
-        if CM_Get_Device_ID_ListW(filter.as_ptr(), buf.as_mut_ptr(), len, CM_GETIDLIST_FILTER_ENUMERATOR) != CR_SUCCESS {
+        if CM_Get_Device_ID_ListW(filter.as_ptr(), buf.as_mut_ptr(), len, flags) != CR_SUCCESS {
             return vec![];
         }
         buf.split(|c| *c == 0)
