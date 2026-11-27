@@ -242,7 +242,7 @@ fn run(shared: Shared, assign: Assignments, rx: Receiver<Cmd>) {
                     pid,
                     hid_strings: strings,
                     power: match power(xi.battery(i as u32)) {
-                        p if p.kind == "wired" && models::has_known_dongle(&siblings) => Power { kind: "dongle", pct: None },
+                        p if p.kind == "wired" && models::is_dongle_emulation(vid, pid, &siblings) => Power { kind: "dongle", pct: None },
                         p => p,
                     },
                     rumble: info.as_ref().map(|x| x.rumble).unwrap_or(true),

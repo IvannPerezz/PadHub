@@ -191,6 +191,55 @@ fn app_version(app: tauri::AppHandle) -> String {
 }
 
 #[derive(Serialize)]
+struct VendorCapture {
+    interface: i32,
+    usage: String,
+    /// Informes recibidos, en hexadecimal (máximo 200 por interfaz).
+    reports: Vec<String>,
+    error: Option<String>,
+}
+
+/// Escucha PASIVA de las interfaces de fabricante (usage page >= 0xFF00) de un
+/// mando: solo lee lo que el mando envía por su cuenta. Nunca escribe nada.
+#[tauri::command]
+async fn listen_vendor(vid: u16, pid: u16, ms: u64) -> Result<Vec<VendorCapture>, String> {
+    let ms = ms.min(10_000);
+    tauri::async_runtime::spawn_blocking(move || {
+        let api = hidapi::HidApi::new().map_err(|e| e.to_string())?;
+        let targets: Vec<_> = api
+            .device_list()
+            .filter(|d| d.vendor_id() == vid && d.product_id() == pid && d.usage_page() >= 0xFF00)
+            .map(|d| (d.path().to_owned(), d.interface_number(), format!("0x{:x}:0x{:x}", d.usage_page(), d.usage())))
+            .collect();
+        let mut out = Vec::new();
+        for (path, interface, usage) in targets {
+            let mut cap = VendorCapture { interface, usage, reports: vec![], error: None };
+            match api.open_path(&path) {
+                Ok(dev) => {
+                    let until = std::time::Instant::now() + std::time::Duration::from_millis(ms);
+                    let mut buf = [0u8; 256];
+                    while std::time::Instant::now() < until && cap.reports.len() < 200 {
+                        match dev.read_timeout(&mut buf, 100) {
+                            Ok(0) => {}
+                            Ok(n) => cap.reports.push(buf[..n].iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" ")),
+                            Err(e) => {
+                                cap.error = Some(e.to_string());
+                                break;
+                            }
+                        }
+                    }
+                }
+                Err(e) => cap.error = Some(e.to_string()),
+            }
+            out.push(cap);
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Serialize)]
 struct HidEntry {
     vid: u16,
     pid: u16,
@@ -248,7 +297,7 @@ fn main() {
         .manage(App { shared, assign, tx: Mutex::new(tx) })
         .invoke_handler(tauri::generate_handler![
             list_pads, pad_live, rumble, models, assign_model, hid_devices,
-            recursos, recurso, check_update, install_update, app_version
+            recursos, recurso, check_update, install_update, app_version, listen_vendor
         ])
         .run(tauri::generate_context!())
         .expect("error al iniciar PadHub");

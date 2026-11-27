@@ -439,12 +439,16 @@ function renderTab() {
       </div>`;
     $('#copy-report').onclick = async (e) => {
       const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = 'Escuchando 5 s… pulsa algunos botones';
       try {
-        await navigator.clipboard.writeText(await buildReport(p));
+        const text = await buildReport(p);
+        await navigator.clipboard.writeText(text);
         btn.textContent = 'Copiado ✓';
       } catch (err) {
         btn.textContent = 'No se pudo copiar';
       }
+      btn.disabled = false;
       setTimeout(() => (btn.textContent = 'Copiar informe'), 2000);
     };
     $('#assign').onchange = async (e) => {
@@ -481,6 +485,11 @@ async function buildReport(p) {
     .map((h) => ({ id: `${hex(h.vid)}:${hex(h.pid)}`, iface: h.interface, usage: `0x${h.usage_page.toString(16)}:0x${h.usage.toString(16)}`, fabricante: h.manufacturer, producto: h.product }));
   let version = '';
   try { version = await invoke('app_version'); } catch {}
+  // Escucha pasiva (solo lectura) del canal de fabricante, si el mando lo tiene.
+  let canal = [];
+  if (p.vid != null && hid.some((h) => h.vid === p.vid && h.pid === p.pid && h.usage_page >= 0xff00)) {
+    try { canal = await invoke('listen_vendor', { vid: p.vid, pid: p.pid, ms: 5000 }); } catch (e) { canal = [{ error: String(e) }]; }
+  }
   return JSON.stringify({
     padhub: version,
     modelo_mostrado: `${p.model.brand} ${p.model.name}`,
@@ -494,6 +503,7 @@ async function buildReport(p) {
     bateria: p.power,
     vibracion: p.rumble,
     interfaces_hid: rel,
+    canal_fabricante_5s: canal,
   }, null, 2);
 }
 

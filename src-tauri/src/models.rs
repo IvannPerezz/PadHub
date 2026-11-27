@@ -69,7 +69,10 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
-        ids: &[],
+        // Confirmado 2026-11-27 (informe de un G3 V2 real por USB-C): 413D:2131,
+        // versión de producto 0x0100, con interfaz de fabricante 0xFF10:0x01.
+        // Por 2.4G se presenta como 045E:028E con el receptor genérico 1A34:F517.
+        ids: &[(0x413D, 0x2131)],
         dongles: &[],
         name_hints: &["g3 v2", "g3v2", "g3"],
         model: Model {
@@ -124,10 +127,14 @@ pub fn by_id(id: &str) -> Option<Model> {
     RULES.iter().find(|r| r.model.id == id).map(|r| r.model.clone())
 }
 
-/// ¿Hay en el mismo puerto un receptor 2.4G conocido? Si es así, el "con cable"
-/// que dice XInput es falso: es el receptor imitando un Xbox 360 con cable.
-pub fn has_known_dongle(siblings: &[(u16, u16)]) -> bool {
-    RULES.iter().any(|r| r.dongles.iter().any(|d| siblings.contains(d)))
+/// ¿Es un receptor 2.4G haciéndose pasar por un Xbox 360 con cable? Solo si el
+/// mando se presenta con el VID/PID de Xbox (045E:028E) y en ese puerto hubo un
+/// receptor conocido. Un mando por cable con su propio VID/PID es cable de verdad.
+pub fn is_dongle_emulation(vid: Option<u16>, pid: Option<u16>, siblings: &[(u16, u16)]) -> bool {
+    vid == Some(0x045E)
+        && pid == Some(0x028E)
+        && (siblings.iter().any(|s| GENERIC_DONGLES.contains(s))
+            || RULES.iter().any(|r| r.dongles.iter().any(|d| siblings.contains(d))))
 }
 
 /// Receptores 2.4G genéricos: el mismo chip lo usan varias marcas
