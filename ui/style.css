@@ -199,6 +199,15 @@ main { flex: 1; position: relative; overflow: hidden; padding-top: 52px; }
 :root[data-theme="dark"] .front .stick-dot,
 :root[data-theme="dark"] .front .trig-glow { z-index: 2; }
 
+/* ---------- cambio de color: escaneo ---------- */
+.swapping img, .swapping .pad { animation: none !important; }
+.scan-line {
+  position: absolute; z-index: 6; height: 2px; margin-top: -1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.95) 20%, #fff 50%, rgba(255, 255, 255, 0.95) 80%, transparent);
+  box-shadow: 0 0 10px 2px color-mix(in srgb, var(--accent) 70%, transparent), 0 0 28px 6px color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 2px;
+}
+
 /* ---------- foto frontal con luces en directo ---------- */
 .front { position: relative; width: 100%; max-width: 600px; margin: 0 auto; }
 .front img { width: 100%; height: 100%; display: block; filter: drop-shadow(0 26px 30px rgba(0, 0, 0, 0.18)); animation: enter 0.5s var(--ease) both; }

@@ -180,7 +180,15 @@ function renderHome() {
   pads.forEach((p) => {
     const svg = view.querySelector(`.card[data-id="${p.id}"] .pad`);
     screenText(svg, 'PADHUB', screenBatt(p));
-    renderSwatches(p, view.querySelector(`.swatches[data-sw="${p.id}"]`), renderHome);
+    const box = view.querySelector(`.swatches[data-sw="${p.id}"]`);
+    const swap = () => {
+      const ph = view.querySelector(`.card[data-id="${p.id}"] .photo`);
+      const src = photoOf(p);
+      if (!ph || !src) return renderHome();
+      scanTransition(ph, () => { ph.querySelector('img').src = src; });
+      renderSwatches(p, box, swap);
+    };
+    renderSwatches(p, box, swap);
   });
 }
 
@@ -256,7 +264,43 @@ function updateDeviceMeta() {
 }
 
 // Muestras de color bajo el mando (como el selector de color del ATK Hub).
-function renderSwatches(p, box = $('#dev-colors'), after = updateDeviceMeta) {
+// Cambio de color con efecto escaneo (como el ATK Hub): la imagen anterior se
+// queda encima y se va recortando de arriba abajo tras una línea luminosa,
+// dejando ver la nueva.
+function scanTransition(container, update) {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const old = container?.querySelector('img, svg.pad');
+  if (!old || reduce) return update();
+  const c = container.getBoundingClientRect();
+  const r = old.getBoundingClientRect();
+  const snap = old.cloneNode(true);
+  Object.assign(snap.style, {
+    position: 'absolute', left: `${r.left - c.left}px`, top: `${r.top - c.top}px`,
+    width: `${r.width}px`, height: `${r.height}px`, margin: '0', maxWidth: 'none', maxHeight: 'none',
+    zIndex: '5', animation: 'none', transform: 'none', pointerEvents: 'none',
+  });
+  container.classList.add('swapping');
+  update();
+  if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
+  const line = document.createElement('i');
+  line.className = 'scan-line';
+  Object.assign(line.style, { left: `${r.left - c.left}px`, width: `${r.width}px`, top: `${r.top - c.top}px` });
+  container.append(snap, line);
+  const timing = { duration: 800, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'forwards' };
+  snap.animate([{ clipPath: 'inset(0 0 0 0)' }, { clipPath: 'inset(100% 0 0 0)' }], timing);
+  line.animate([
+    { transform: 'translateY(0)', opacity: 0 },
+    { opacity: 1, offset: 0.08 },
+    { opacity: 1, offset: 0.9 },
+    { transform: `translateY(${r.height}px)`, opacity: 0 },
+  ], timing).finished.then(() => {
+    snap.remove();
+    line.remove();
+    container.classList.remove('swapping');
+  });
+}
+
+function renderSwatches(p, box = $('#dev-colors'), after = () => scanTransition($('#dev-svg'), updateDeviceMeta)) {
   const vs = variantsFor(p.model);
   if (!box) return;
   if (vs.length < 2) { box.innerHTML = ''; return; }
