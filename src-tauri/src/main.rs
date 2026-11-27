@@ -83,11 +83,35 @@ struct Recursos {
     files: Vec<String>,
 }
 
+fn recursos_dir() -> PathBuf {
+    std::env::var_os("APPDATA")
+        .map(|p| PathBuf::from(p).join("PadHub").join("recursos"))
+        .unwrap_or_default()
+}
+
+/// El instalador "completo" (solo para compartir en privado) lleva los recursos
+/// junto al ejecutable. Se copian a %APPDATA% para que sobrevivan a las
+/// actualizaciones públicas, que no los incluyen. No sobrescribe nada existente.
+fn instalar_recursos_empaquetados(app: &tauri::App) {
+    use tauri::Manager;
+    let Ok(res) = app.path().resource_dir() else { return };
+    let src = res.join("recursos");
+    let dst = recursos_dir();
+    for sub in ["img", "fonts"] {
+        let Ok(rd) = std::fs::read_dir(src.join(sub)) else { continue };
+        let _ = std::fs::create_dir_all(dst.join(sub));
+        for e in rd.flatten() {
+            let to = dst.join(sub).join(e.file_name());
+            if !to.exists() {
+                let _ = std::fs::copy(e.path(), to);
+            }
+        }
+    }
+}
+
 #[tauri::command]
 fn recursos() -> Recursos {
-    let dir = std::env::var_os("APPDATA")
-        .map(|p| PathBuf::from(p).join("PadHub").join("recursos"))
-        .unwrap_or_default();
+    let dir = recursos_dir();
     let mut files = Vec::new();
     for sub in ["img", "fonts"] {
         if let Ok(rd) = std::fs::read_dir(dir.join(sub)) {
@@ -194,6 +218,10 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            instalar_recursos_empaquetados(app);
+            Ok(())
+        })
         .manage(App { shared, assign, tx: Mutex::new(tx) })
         .invoke_handler(tauri::generate_handler![
             list_pads, pad_live, rumble, models, assign_model, hid_devices,

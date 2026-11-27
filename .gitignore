@@ -4,3 +4,7 @@ src-tauri/gen/
 ui/img/
 ui/fonts/
 *.key
+
+# Build privada con recursos de terceros (solo para compartir en privado)
+src-tauri/recursos-privados/
+src-tauri/tauri.privada.conf.json
