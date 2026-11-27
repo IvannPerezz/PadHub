@@ -1,4 +1,4 @@
-# Publica una versión nueva de PadHub en GitHub Releases.
+﻿# Publica una versión nueva de PadHub en GitHub Releases.
 # Uso:  .\release.ps1 -Version 0.1.1 -Notes "Qué cambia en esta versión"
 #
 # 1. Pone la versión en tauri.conf.json y Cargo.toml
@@ -10,7 +10,9 @@ param(
   [Parameter(Mandatory = $true)][string]$Version,
   [string]$Notes = ""
 )
-$ErrorActionPreference = 'Stop'
+# 'Continue': en PowerShell 5.1, con 'Stop', los mensajes informativos que cargo/gh
+# escriben por stderr se tratan como errores. Los fallos se comprueban con $LASTEXITCODE.
+$ErrorActionPreference = 'Continue'
 $root = $PSScriptRoot
 $repo = 'IvannPerezz/PadHub'
 $cargo = "$env:USERPROFILE\.cargo\bin\cargo.exe"
@@ -62,7 +64,9 @@ try {
   git commit -m "Versión $Version" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   git tag "v$Version"
   git push origin HEAD --tags
+  if ($LASTEXITCODE) { throw "No se pudo subir a GitHub" }
   $n = if ($Notes) { $Notes } else { "PadHub $Version" }
   gh release create "v$Version" $dist "$($setup.FullName).sig" $latestPath --repo $repo --title "PadHub $Version" --notes $n
+  if ($LASTEXITCODE) { throw "No se pudo crear la release" }
 } finally { Pop-Location }
 Write-Host "Publicada la versión $Version"
