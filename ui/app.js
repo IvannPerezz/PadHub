@@ -53,22 +53,27 @@ function variantOf(p) {
 const art = (p) => padSvg(p.model, variantOf(p));
 // Recursos locales (%APPDATA%\PadHub\recursos): fotos y fuente. Si faltan, se usan
 // los dibujos vectoriales y la fuente del sistema.
-let RES = { dir: '', files: [] };
-function res(rel) {
-  if (!rel || !RES.files.includes(rel)) return null;
-  return T.core.convertFileSrc(`${RES.dir}\\${rel.replace(/\//g, '\\')}`);
-}
+// Cada recurso llega de Rust como data URL; se guardan en memoria al arrancar.
+const RESURL = new Map();
+const res = (rel) => (rel ? RESURL.get(rel) ?? null : null);
 async function loadResources() {
-  try { RES = await invoke('recursos'); } catch { return; }
-  const loads = [400, 500, 600, 700].map(async (w) => {
-    const url = res(`fonts/sf-pro-display-${w}.otf`);
-    if (!url) return;
+  let list;
+  try { list = await invoke('recursos'); } catch { return; }
+  await Promise.all(list.files.map(async (rel) => {
     try {
-      const face = new FontFace('SF Pro Display', `url("${url}")`, { weight: String(w) });
-      document.fonts.add(await face.load());
-    } catch {}
-  });
-  await Promise.all(loads);
+      const url = await invoke('recurso', { rel });
+      if (!url) return;
+      if (rel.startsWith('fonts/')) {
+        const w = /-(\d{3})\./.exec(rel)?.[1] ?? '400';
+        const face = new FontFace('SF Pro Display', `url("${url}")`, { weight: w });
+        document.fonts.add(await face.load());
+      } else {
+        RESURL.set(rel, url);
+      }
+    } catch (e) {
+      console.warn('Recurso', rel, e);
+    }
+  }));
 }
 const photoOf = (p) => res(PHOTOS[p.model.id]?.[variantOf(p).id]);
 function frontOf(p) {

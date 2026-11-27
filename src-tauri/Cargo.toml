@@ -1,6 +1,6 @@
 [package]
 name = "padhub"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Hub para mandos de terceros"
 
@@ -8,7 +8,8 @@ description = "Hub para mandos de terceros"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset"] }
+tauri = { version = "2", features = [] }
+base64 = "0.22"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }

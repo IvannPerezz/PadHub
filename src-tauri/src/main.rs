@@ -125,6 +125,29 @@ fn recursos() -> Recursos {
     Recursos { dir: dir.to_string_lossy().into_owned(), files }
 }
 
+/// Devuelve un recurso local como data URL (base64). Así la interfaz no depende
+/// de rutas de disco (usuarios con tildes, carpetas virtualizadas…).
+#[tauri::command]
+fn recurso(rel: String) -> Option<String> {
+    let (sub, name) = rel.split_once('/')?;
+    let valid = matches!(sub, "img" | "fonts")
+        && !name.is_empty()
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'));
+    if !valid {
+        return None;
+    }
+    let mime = match name.rsplit('.').next()?.to_ascii_lowercase().as_str() {
+        "webp" => "image/webp",
+        "png" => "image/png",
+        "otf" => "font/otf",
+        "ttf" => "font/ttf",
+        _ => return None,
+    };
+    let bytes = std::fs::read(recursos_dir().join(sub).join(name)).ok()?;
+    use base64::Engine;
+    Some(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+}
+
 #[derive(Serialize)]
 struct UpdateInfo {
     version: String,
@@ -225,7 +248,7 @@ fn main() {
         .manage(App { shared, assign, tx: Mutex::new(tx) })
         .invoke_handler(tauri::generate_handler![
             list_pads, pad_live, rumble, models, assign_model, hid_devices,
-            recursos, check_update, install_update, app_version
+            recursos, recurso, check_update, install_update, app_version
         ])
         .run(tauri::generate_context!())
         .expect("error al iniciar PadHub");
