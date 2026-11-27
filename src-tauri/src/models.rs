@@ -130,26 +130,38 @@ pub fn has_known_dongle(siblings: &[(u16, u16)]) -> bool {
     RULES.iter().any(|r| r.dongles.iter().any(|d| siblings.contains(d)))
 }
 
-/// Devuelve el modelo y cómo se ha reconocido.
+/// Receptores 2.4G genéricos: el mismo chip lo usan varias marcas
+/// (confirmado: Manba One V2 y Machenike G3 V2 llevan 1A34:F517).
+/// Indican que hay un receptor, pero no qué mando es.
+const GENERIC_DONGLES: &[(u16, u16)] = &[(0x1A34, 0xF517)];
+
+/// Devuelve el modelo, cómo se ha reconocido y si la detección es segura.
+/// Si no es segura, la interfaz pregunta al usuario qué mando es.
 pub fn identify(
     vid: Option<u16>,
     pid: Option<u16>,
     names: &[&str],
     siblings: &[(u16, u16)],
-) -> Option<(Model, String)> {
+) -> Option<(Model, String, bool)> {
     if let (Some(v), Some(p)) = (vid, pid) {
         if let Some(r) = RULES.iter().find(|r| r.ids.contains(&(v, p))) {
-            return Some((r.model.clone(), "Por su VID/PID".into()));
+            return Some((r.model.clone(), "Por su VID/PID".into(), true));
         }
     }
     for r in RULES {
         if let Some((v, p)) = r.dongles.iter().find(|d| siblings.contains(d)) {
-            return Some((r.model.clone(), format!("Por su receptor {v:04X}:{p:04X} en el mismo puerto USB")));
+            let sure = !GENERIC_DONGLES.contains(&(*v, *p));
+            let how = if sure {
+                format!("Por su receptor {v:04X}:{p:04X} en el mismo puerto USB")
+            } else {
+                format!("Receptor genérico {v:04X}:{p:04X}: lo usan varios mandos, confirma cuál es")
+            };
+            return Some((r.model.clone(), how, sure));
         }
     }
     let hay: Vec<String> = names.iter().map(|n| n.to_lowercase()).collect();
     RULES
         .iter()
         .find(|r| r.name_hints.iter().any(|h| hay.iter().any(|n| n.contains(h))))
-        .map(|r| (r.model.clone(), "Por su nombre".into()))
+        .map(|r| (r.model.clone(), "Por su nombre".into(), true))
 }

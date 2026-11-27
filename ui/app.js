@@ -51,6 +51,8 @@ function variantOf(p) {
   return vs.find((v) => v.id === id) ?? vs[0];
 }
 const art = (p) => padSvg(p.model, variantOf(p));
+// Dibujo neutro para mandos cuyo modelo aún no se sabe.
+const GENERIC = { id: 'generic', art: 'generic', brand: '', name: '', body: '#2a2b31', accent: '#9aa0ad' };
 // Recursos locales (%APPDATA%\PadHub\recursos): fotos y fuente. Si faltan, se usan
 // los dibujos vectoriales y la fuente del sistema.
 // Cada recurso llega de Rust como data URL; se guardan en memoria al arrancar.
@@ -98,7 +100,7 @@ async function pollPads() {
   } catch (e) {
     console.error(e);
   }
-  const sig = JSON.stringify(pads.map((p) => [p.id, p.model.id, p.power, p.name]));
+  const sig = JSON.stringify(pads.map((p) => [p.id, p.model.id, p.power, p.name, p.needs_confirm, p.assigned]));
   if (sig !== padsSig) {
     padsSig = sig;
     if (route.name === 'device' && !pads.some((p) => p.id === route.id)) route = { name: 'home' };
@@ -138,10 +140,17 @@ function renderHome() {
       <div class="carousel">
         ${pads.map((p, i) => `
           <article class="card" data-id="${p.id}" style="animation-delay:${i * 70}ms">
+            ${p.needs_confirm ? `
+            ${padSvg(GENERIC)}
+            <div class="brand">Receptor 2.4G genérico</div>
+            <div class="mname">¿Qué mando es?</div>
+            <div class="chips">
+              ${models.filter((m) => m.id !== 'machenike-generic').map((m) => `<button class="pill ghost btn chip" data-assign="${m.id}">${m.brand} ${m.name}</button>`).join('')}
+            </div>` : `
             ${photoOf(p) ? `<div class="photo"><img src="${photoOf(p)}" alt="" draggable="false"></div>` : art(p)}
             <div class="brand">${p.model.brand}</div>
             <div class="mname">${p.model.id === 'generic' ? esc(p.name) : p.model.name}</div>
-            <div class="swatches" data-sw="${p.id}"></div>
+            <div class="swatches" data-sw="${p.id}"></div>`}
             <div class="row">
               <span class="pill">${battery(p.power, p)}</span>
               <button class="pill dark btn">Entrar  →</button>
@@ -151,6 +160,13 @@ function renderHome() {
       </div>
     </section>`;
   view.querySelectorAll('.card').forEach((c) => (c.onclick = () => openDevice(+c.dataset.id)));
+  view.querySelectorAll('[data-assign]').forEach((b) => (b.onclick = async (e) => {
+    e.stopPropagation();
+    const p = pads.find((x) => x.id === +b.closest('.card').dataset.id);
+    await invoke('assign_model', { key: p.key, model: b.dataset.assign });
+    padsSig = '';
+    pollPads();
+  }));
   pads.forEach((p) => {
     const svg = view.querySelector(`.card[data-id="${p.id}"] .pad`);
     screenText(svg, 'PADHUB', screenBatt(p));
@@ -411,8 +427,26 @@ function renderTab() {
           <dt>Mapeo</dt><dd>${{ driver: 'XInput (gamepad)', other: 'XInput (otro tipo)' }[p.mapping] ?? p.mapping}</dd>
           <dt>Batería</dt><dd>${battery(p.power, p)}</dd>
           <dt>Vibración</dt><dd>${p.rumble ? 'Sí' : 'No'}</dd>
+          <dt>Versión de producto</dt><dd class="mono">${p.product_version != null ? `0x${p.product_version.toString(16).padStart(4, '0').toUpperCase()}` : '—'}</dd>
         </dl>
+      </div>
+      <div class="sec">
+        <h3>Soporte</h3>
+        <div class="box" style="display:flex;flex-direction:column;gap:10px">
+          <p class="hint">Copia un informe técnico de este mando (identificadores, receptor y sus interfaces USB) para mandarlo y mejorar la detección. No incluye datos personales.</p>
+          <div class="actions"><button class="pill dark btn" id="copy-report">Copiar informe</button></div>
+        </div>
       </div>`;
+    $('#copy-report').onclick = async (e) => {
+      const btn = e.currentTarget;
+      try {
+        await navigator.clipboard.writeText(await buildReport(p));
+        btn.textContent = 'Copiado ✓';
+      } catch (err) {
+        btn.textContent = 'No se pudo copiar';
+      }
+      setTimeout(() => (btn.textContent = 'Copiar informe'), 2000);
+    };
     $('#assign').onchange = async (e) => {
       await invoke('assign_model', { key: p.key, model: e.target.value || null });
       padsSig = '';
@@ -436,6 +470,32 @@ renderTab = function () {
   _renderTab();
   document.querySelectorAll('#pane input[type="range"]').forEach(fillRange);
 };
+
+// Informe técnico para identificar receptores (sin rutas ni nombres de usuario).
+async function buildReport(p) {
+  let hid = [];
+  try { hid = await invoke('hid_devices'); } catch {}
+  const ids = new Set([`${hex(p.vid)}:${hex(p.pid)}`, ...p.siblings]);
+  const rel = hid
+    .filter((h) => ids.has(`${hex(h.vid)}:${hex(h.pid)}`))
+    .map((h) => ({ id: `${hex(h.vid)}:${hex(h.pid)}`, iface: h.interface, usage: `0x${h.usage_page.toString(16)}:0x${h.usage.toString(16)}`, fabricante: h.manufacturer, producto: h.product }));
+  let version = '';
+  try { version = await invoke('app_version'); } catch {}
+  return JSON.stringify({
+    padhub: version,
+    modelo_mostrado: `${p.model.brand} ${p.model.name}`,
+    como: p.how,
+    asignado: p.assigned,
+    vid_pid: `${hex(p.vid)}:${hex(p.pid)}`,
+    version_producto: p.product_version,
+    mismo_puerto: p.siblings,
+    nombre_windows: p.os_name,
+    cadenas_hid: p.hid_strings,
+    bateria: p.power,
+    vibracion: p.rumble,
+    interfaces_hid: rel,
+  }, null, 2);
+}
 
 function showRes(html) {
   const r = $('#res');

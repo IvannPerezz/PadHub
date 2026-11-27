@@ -93,6 +93,7 @@ pub struct Info {
     pub pid: Option<u16>,
     pub sub_type: u8,
     pub rumble: bool,
+    pub product_version: Option<u16>,
 }
 
 /// (tipo, nivel 0..=3). Tipo: 0 desconectado, 1 con cable, 2 alcalinas, 3 NiMH, 0xFF desconocido.
@@ -152,6 +153,7 @@ impl XInput {
                         pid: Some(c.product_id).filter(|_| c.vendor_id != 0),
                         sub_type: c.caps.sub_type,
                         rumble: c.caps.vibration.left != 0 || c.caps.vibration.right != 0,
+                        product_version: Some(c.product_version),
                     });
                 }
             }
@@ -162,6 +164,7 @@ impl XInput {
                     pid: None,
                     sub_type: c.sub_type,
                     rumble: c.vibration.left != 0 || c.vibration.right != 0,
+                    product_version: None,
                 });
             }
             None

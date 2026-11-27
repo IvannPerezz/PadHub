@@ -32,6 +32,10 @@ pub struct PadInfo {
     pub model: Model,
     pub identified: bool,
     pub assigned: bool,
+    /// Detectado por un receptor genérico: hay que preguntar qué mando es.
+    pub needs_confirm: bool,
+    /// Versión de producto que reporta XInput (ayuda a distinguir receptores).
+    pub product_version: Option<u16>,
     /// Cómo se ha reconocido el modelo.
     pub how: Option<String>,
     /// Otros VID/PID vistos en el mismo puerto USB.
@@ -223,9 +227,12 @@ fn run(shared: Shared, assign: Assignments, rx: Receiver<Cmd>) {
                 let auto = models::identify(vid, pid, &names, &siblings);
                 let manual = assign_map.get(&key).and_then(|m| models::by_id(m));
                 let assigned = manual.is_some();
-                let identified = assigned || auto.is_some();
-                let how = if assigned { Some("Asignado a mano".to_string()) } else { auto.as_ref().map(|(_, h)| h.clone()) };
-                let auto = auto.map(|(m, _)| m);
+                let sure = auto.as_ref().map(|(_, _, s)| *s).unwrap_or(false);
+                let identified = assigned || sure;
+                // Receptor genérico sin modelo elegido: la interfaz pregunta cuál es.
+                let needs_confirm = !assigned && auto.is_some() && !sure;
+                let how = if assigned { Some("Asignado a mano".to_string()) } else { auto.as_ref().map(|(_, h, _)| h.clone()) };
+                let auto = auto.map(|(m, _, _)| m);
                 infos.push(PadInfo {
                     id: i,
                     key,
@@ -243,6 +250,8 @@ fn run(shared: Shared, assign: Assignments, rx: Receiver<Cmd>) {
                     model: manual.or(auto).unwrap_or_else(models::generic),
                     identified,
                     assigned,
+                    needs_confirm,
+                    product_version: info.as_ref().and_then(|x| x.product_version),
                     how,
                     siblings: siblings.iter().map(|(v, p)| format!("{v:04X}:{p:04X}")).collect(),
                 });
