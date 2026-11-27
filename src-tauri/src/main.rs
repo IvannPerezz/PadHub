@@ -102,7 +102,9 @@ fn instalar_recursos_empaquetados(app: &tauri::App) {
         let _ = std::fs::create_dir_all(dst.join(sub));
         for e in rd.flatten() {
             let to = dst.join(sub).join(e.file_name());
-            if !to.exists() {
+            // Copia si falta o si el empaquetado es distinto (fotos mejoradas).
+            let size = |p: &std::path::Path| std::fs::metadata(p).map(|m| m.len()).ok();
+            if size(&to) != size(&e.path()) {
                 let _ = std::fs::copy(e.path(), to);
             }
         }

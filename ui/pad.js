@@ -57,8 +57,8 @@ const G3_MARKS = {
 };
 export const FRONT = {
   'manba-one-v2': {
-    blanco: { src: 'img/front-blanco.webp', ratio: 797 / 585, marks: MANBA_MARKS.blanco },
-    negro: { src: 'img/front-negro.webp', ratio: 900 / 658, marks: MANBA_MARKS.negro },
+    blanco: { src: 'img/front-blanco.webp', ratio: 1157 / 848, marks: MANBA_MARKS.blanco },
+    negro: { src: 'img/front-negro.webp', ratio: 1171 / 858, marks: MANBA_MARKS.negro },
   },
   'machenike-g3-v2': {
     azul: { src: 'img/g3-front-azul.webp', ratio: 850 / 582, marks: G3_MARKS.azul },

@@ -263,7 +263,7 @@ function renderSwatches(p, box = $('#dev-colors'), after = updateDeviceMeta) {
   const cur = variantOf(p).id;
   box.innerHTML = vs
     .map((v) => `<button class="sw ${v.id === cur ? 'on' : ''}" data-v="${v.id}" title="${v.label}" style="--sw:${v.body}"><i></i></button>`)
-    .join('') + `<span class="sw-label">${variantOf(p).label}</span>`;
+    .join('');
   box.querySelectorAll('.sw').forEach((b) => (b.onclick = (e) => {
     e.stopPropagation();
     store.set(`variant:${p.key}:${p.model.id}`, b.dataset.v);
