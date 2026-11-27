@@ -282,6 +282,9 @@ function scanTransition(container, update) {
   });
   container.classList.add('swapping');
   update();
+  // La imagen nueva no debe reproducir su animación de entrada al terminar el
+  // escaneo (eso provocaba un parpadeo): se anula en ella directamente.
+  container.querySelectorAll('img, svg.pad').forEach((el) => { el.style.animation = 'none'; });
   if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
   const line = document.createElement('i');
   line.className = 'scan-line';
