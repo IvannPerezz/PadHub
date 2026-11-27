@@ -30,6 +30,16 @@ function battery(p, pad) {
   if (p.kind === 'dongle') {
     return `<span class="batt" title="El receptor 2.4G se presenta como un mando con cable y no informa de la batería"><i><b style="width:0"></b></i>Batería: ver en el mando</span>`;
   }
+  if (p.kind === 'wired') {
+    // Símbolo USB (tridente): tronco con flecha, rama con círculo y rama con cuadrado.
+    return `<span class="batt usb"><svg viewBox="0 0 48 24" aria-hidden="true">
+      <circle cx="6" cy="12" r="4.5"/>
+      <path class="ln" d="M9 12 H40 M16 12 L21 6 H30 M19 12 L24 18 H32"/>
+      <path d="M38 8.2 L46 12 L38 15.8 Z"/>
+      <circle cx="31.5" cy="6" r="2.6"/>
+      <rect x="31" y="15.6" width="4.8" height="4.8"/>
+    </svg>Con cable</span>`;
+  }
   const level = p.pct ?? (p.kind === 'charged' ? 100 : null);
   const cls = level == null ? '' : level <= 15 ? 'low' : level <= 35 ? 'mid' : '';
   const fill = level == null ? (p.kind === 'wired' ? 100 : 0) : level;

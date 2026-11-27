@@ -161,6 +161,8 @@ main { flex: 1; position: relative; overflow: hidden; padding-top: 52px; }
 .batt i { position: relative; width: 22px; height: 11px; border: 1.4px solid currentColor; border-radius: 3.5px; opacity: 0.8; }
 .batt i::after { content: ""; position: absolute; right: -3.8px; top: 2.6px; width: 1.8px; height: 3.4px; background: currentColor; border-radius: 0 1px 1px 0; }
 .batt i b { position: absolute; left: 1.4px; top: 1.4px; bottom: 1.4px; border-radius: 1.5px; background: currentColor; }
+.batt.usb svg { width: 26px; height: 13px; flex: none; fill: currentColor; opacity: 0.85; }
+.batt.usb svg .ln { fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
 .batt.low { color: var(--bad); }
 .batt.mid { color: var(--warn); }
 
